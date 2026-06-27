@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/hero-banner.svg" width="100%" alt="TradeEasy" />
+<img src="./assets/hero-banner.svg" width="100%" alt="InvestEasy" />
 
 <br/>
 
@@ -8,7 +8,7 @@
 <a href="#core-capabilities"><strong>Core Capabilities</strong></a> ·
 <a href="#how-it-works"><strong>How It Works</strong></a> ·
 <a href="#key-differentiators"><strong>Key Differentiators</strong></a> ·
-<a href="#built-for-indian-markets"><strong>Built for Indian Markets</strong></a> ·
+<a href="#built-for-indian-markets"><strong>Built for Markets</strong></a> ·
 <a href="#disclaimer"><strong>Disclaimer</strong></a>
 
 </div>
@@ -17,7 +17,7 @@
 
 ## Overview
 
-TradeEasy is a quant intelligence platform that converts natural-language investment goals into fully reasoned, continuously monitored portfolios for Indian retail investors.
+InvestEasy is a quant intelligence platform that converts natural-language investment goals into fully reasoned, continuously monitored portfolios for Indian retail investors.
 
 - Accepts plain-English investment goals as input (capital, horizon, risk tolerance, sector exclusions)
 - Ingests live market data and applies multiple independent forecasting approaches per stock
@@ -45,7 +45,7 @@ TradeEasy is a quant intelligence platform that converts natural-language invest
 <br/>
 
 <div align="center">
-<img src="./assets/pipeline-diagram.svg" width="100%" alt="How a request moves through TradeEasy" />
+<img src="./assets/pipeline-diagram.svg" width="100%" alt="How a request moves through InvestEasy" />
 </div>
 
 <br/>
