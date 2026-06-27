@@ -1,4 +1,5 @@
 """Central configuration for QUANTIS backend."""
+from __future__ import annotations
 import os
 from pathlib import Path
 
@@ -10,7 +11,7 @@ CACHE_DIR = ROOT_DIR / ".cache"
 for _d in (DATA_DIR, MODELS_DIR, CACHE_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
-GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
+groq_API_KEY: str = os.environ.get("API_KEY", "")
 REDIS_URL: str = os.environ.get("REDIS_URL", "redis://localhost:6379")
 DATABASE_URL: str = os.environ.get("DATABASE_URL", f"sqlite:///{ROOT_DIR}/quantis.db")
 
@@ -24,13 +25,11 @@ NIFTY50_TICKERS = [
     "HINDUNILVR.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS", "KOTAKBANK.NS",
     "LT.NS", "AXISBANK.NS", "BAJFINANCE.NS", "ASIANPAINT.NS", "MARUTI.NS",
     "TITAN.NS", "SUNPHARMA.NS", "ULTRACEMCO.NS", "WIPRO.NS", "NTPC.NS",
-    "ONGC.NS", "POWERGRID.NS", "M&M.NS", "HCLTECH.NS", "BAJAJFINSV.NS",
+    "ONGC.NS", "POWERGRID.NS", "HCLTECH.NS", "BAJAJFINSV.NS",
     "COALINDIA.NS", "TATAMOTORS.NS", "ADANIENT.NS", "JSWSTEEL.NS",
-    "TATASTEEL.NS", "TECHM.NS", "NESTLEIND.NS", "CIPLA.NS", "DIVISLAB.NS",
+    "TATASTEEL.NS", "TECHM.NS", "NESTLEIND.NS", "CIPLA.NS",
     "APOLLOHOSP.NS", "DRREDDY.NS", "BRITANNIA.NS", "EICHERMOT.NS",
-    "HEROMOTOCO.NS", "GRASIM.NS", "HINDALCO.NS", "BPCL.NS", "TATACONSUM.NS",
-    "INDUSINDBK.NS", "SBILIFE.NS", "HDFCLIFE.NS", "UPL.NS",
-    "SHREECEM.NS", "ADANIPORTS.NS", "BAJAJ-AUTO.NS",
+    "HEROMOTOCO.NS", "GRASIM.NS", "HINDALCO.NS", "BPCL.NS",
 ]
 
 NIFTY50_INDEX = "^NSEI"
@@ -41,21 +40,20 @@ SECTOR_MAP: dict[str, str] = {
     "TCS.NS": "IT", "INFY.NS": "IT", "WIPRO.NS": "IT",
     "HCLTECH.NS": "IT", "TECHM.NS": "IT",
     "HDFCBANK.NS": "Banking", "ICICIBANK.NS": "Banking", "SBIN.NS": "Banking",
-    "KOTAKBANK.NS": "Banking", "AXISBANK.NS": "Banking", "INDUSINDBK.NS": "Banking",
+    "KOTAKBANK.NS": "Banking", "AXISBANK.NS": "Banking",
     "BAJFINANCE.NS": "NBFC", "BAJAJFINSV.NS": "NBFC",
     "HINDUNILVR.NS": "FMCG", "ITC.NS": "FMCG", "NESTLEIND.NS": "FMCG",
-    "BRITANNIA.NS": "FMCG", "TATACONSUM.NS": "FMCG",
-    "SUNPHARMA.NS": "Pharma", "CIPLA.NS": "Pharma", "DIVISLAB.NS": "Pharma",
+    "BRITANNIA.NS": "FMCG",
+    "SUNPHARMA.NS": "Pharma", "CIPLA.NS": "Pharma",
     "DRREDDY.NS": "Pharma", "APOLLOHOSP.NS": "Healthcare",
-    "LT.NS": "Infra", "ADANIPORTS.NS": "Infra", "POWERGRID.NS": "Utilities",
+    "LT.NS": "Infra", "POWERGRID.NS": "Utilities",
     "NTPC.NS": "Utilities", "COALINDIA.NS": "Metals",
     "TATASTEEL.NS": "Metals", "JSWSTEEL.NS": "Metals", "HINDALCO.NS": "Metals",
-    "MARUTI.NS": "Auto", "TATAMOTORS.NS": "Auto", "M&M.NS": "Auto",
+    "MARUTI.NS": "Auto", "TATAMOTORS.NS": "Auto",
     "BAJAJ-AUTO.NS": "Auto", "HEROMOTOCO.NS": "Auto", "EICHERMOT.NS": "Auto",
-    "ASIANPAINT.NS": "Paints", "TITAN.NS": "Consumer", "ULTRACEMCO.NS": "Cement",
-    "SHREECEM.NS": "Cement", "GRASIM.NS": "Cement",
+    "ASIANPAINT.NS": "Paints", "TITAN.NS": "Consumer",
+    "ULTRACEMCO.NS": "Cement", "GRASIM.NS": "Cement",
     "BHARTIARTL.NS": "Telecom", "ADANIENT.NS": "Conglomerate",
-    "SBILIFE.NS": "Insurance", "HDFCLIFE.NS": "Insurance", "UPL.NS": "Agri",
 }
 
 MAX_SINGLE_STOCK_WEIGHT: float = 0.20
@@ -68,10 +66,18 @@ KELLY_REGIME_FACTORS = {
 }
 
 LGBM_PARAMS = {
-    "n_estimators": 500, "learning_rate": 0.03, "num_leaves": 63,
-    "max_depth": 6, "feature_fraction": 0.8, "bagging_fraction": 0.8,
-    "bagging_freq": 5, "min_child_samples": 20, "objective": "regression",
-    "metric": "rmse", "first_metric_only": True, "n_jobs": -1, "verbose": -1,
+    "n_estimators": 300,
+    "learning_rate": 0.05,
+    "num_leaves": 63,
+    "max_depth": 6,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq": 5,
+    "min_child_samples": 20,
+    "objective": "regression",
+    "metric": "rmse",
+    "n_jobs": -1,
+    "verbose": -1,
 }
 
 HMM_N_COMPONENTS: int = 4
@@ -82,16 +88,9 @@ HMM_COVARIANCE_TYPE: str = "diag"
 KAN_WIDTH = [84, 64, 32, 1]
 KAN_GRID_SIZE: int = 5
 KAN_SPLINE_ORDER: int = 3
-KAN_EPOCHS: int = 100
+KAN_EPOCHS: int = 50
 KAN_LR: float = 1e-3
 KAN_EARLY_STOP: int = 10
-
-MAMBA_D_MODEL: int = 64
-MAMBA_D_STATE: int = 16
-MAMBA_D_CONV: int = 4
-MAMBA_EXPAND: int = 2
-MAMBA_SEQ_LEN: int = 60
-MAMBA_INPUT_FEATURES: int = 20
 
 WF_TRAIN_DAYS: int = 252
 WF_TEST_DAYS: int = 63
@@ -100,7 +99,5 @@ WF_EMBARGO_DAYS: int = 21
 
 IC_DEGRADED_THRESHOLD: float = 0.02
 IC_BLOCKED_THRESHOLD: float = 0.00
-IC_DEGRADED_DAYS: int = 5
-IC_RECOVERY_THRESHOLD: float = 0.05
-IC_RECOVERY_DAYS: int = 3
 IC_ROLLING_WINDOW: int = 20
+IC_RECOVERY_THRESHOLD: float = 0.05
