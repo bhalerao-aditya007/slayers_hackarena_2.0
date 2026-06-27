@@ -2,66 +2,41 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import uuid
+import random
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
 
-import redis.asyncio as aioredis
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from rq import Queue
-from rq.job import Job
-import redis as sync_redis
 
-from quantis.api.schemas import (
-    AnalyzeRequest,
-    AnalyzeResponse,
-    JobStatus,
-    ScenarioRequest,
-    StatusResponse,
-    StocksResponse,
-)
 from quantis.api.router import router as api_router
-from quantis.config import REDIS_URL
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
 logger = logging.getLogger("quantis.main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup / shutdown lifecycle."""
-    logger.info("QUANTIS backend starting...")
-    try:
-        r = sync_redis.from_url(REDIS_URL)
-        r.ping()
-        app.state.redis_sync = r
-        app.state.queue = Queue(connection=r)
-        logger.info("Redis connected at %s", REDIS_URL)
-    except Exception as e:
-        logger.warning("Redis not available (%s) — running in mock mode", e)
-        app.state.redis_sync = None
-        app.state.queue = None
-
+    logger.info("QUANTIS backend starting (no Mamba, real ML pipeline)...")
     yield
-
     logger.info("QUANTIS backend shutting down...")
 
 
 app = FastAPI(
     title="QUANTIS API",
-    description="Regime-Aware Quant Intelligence Platform for Indian Markets",
-    version="1.0.0",
+    description="Regime-Aware Quant Intelligence Platform — KAN + LightGBM + PatchTST + IL",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,35 +45,39 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api")
 
 
-# ── WebSocket connection manager ───────────────────────────────────────────────
+# ── WebSocket connection manager ──────────────────────────────────────────────
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: dict[str, list[WebSocket]] = {}
+        self.job_connections: dict[str, list[WebSocket]] = {}
+        self.live_connections: list[WebSocket] = []
 
-    async def connect(self, ws: WebSocket, job_id: str):
+    async def connect_job(self, ws: WebSocket, job_id: str):
         await ws.accept()
-        self.active_connections.setdefault(job_id, []).append(ws)
+        self.job_connections.setdefault(job_id, []).append(ws)
 
-    def disconnect(self, ws: WebSocket, job_id: str):
-        conns = self.active_connections.get(job_id, [])
+    async def connect_live(self, ws: WebSocket):
+        await ws.accept()
+        self.live_connections.append(ws)
+
+    def disconnect_job(self, ws: WebSocket, job_id: str):
+        conns = self.job_connections.get(job_id, [])
         if ws in conns:
             conns.remove(ws)
 
-    async def broadcast(self, job_id: str, message: dict):
-        for ws in self.active_connections.get(job_id, []):
+    def disconnect_live(self, ws: WebSocket):
+        if ws in self.live_connections:
+            self.live_connections.remove(ws)
+
+    async def broadcast_live(self, message: dict):
+        dead = []
+        for ws in self.live_connections:
             try:
                 await ws.send_json(message)
             except Exception:
-                pass
-
-    async def broadcast_all(self, message: dict):
-        for conns in self.active_connections.values():
-            for ws in conns:
-                try:
-                    await ws.send_json(message)
-                except Exception:
-                    pass
+                dead.append(ws)
+        for ws in dead:
+            self.live_connections.remove(ws)
 
 
 manager = ConnectionManager()
@@ -106,40 +85,47 @@ manager = ConnectionManager()
 
 @app.websocket("/ws/live")
 async def websocket_live(websocket: WebSocket):
-    """Global live WebSocket — regime updates, price ticks, agent messages."""
-    await websocket.accept()
-    logger.info("WebSocket client connected")
+    """Global live WebSocket — NIFTY price ticks + regime updates."""
+    await manager.connect_live(websocket)
+    logger.info("Live WebSocket connected (total: %d)", len(manager.live_connections))
     try:
+        nifty_base = 22184.0
         while True:
-            # Heartbeat + mock live data every 15 seconds
             await asyncio.sleep(15)
-            import random
+            # Simulate live NIFTY tick
+            nifty_base += random.uniform(-50, 50)
+            india_vix = 14.5 + random.uniform(-2, 3)
             await websocket.send_json({
                 "type": "price_tick",
                 "data": {
-                    "nifty_level": round(22000 + random.uniform(-200, 200), 2),
-                    "india_vix": round(14 + random.uniform(-2, 4), 2),
+                    "nifty_level": round(nifty_base, 2),
+                    "india_vix": round(india_vix, 2),
                     "timestamp": datetime.utcnow().isoformat(),
                 },
                 "timestamp": datetime.utcnow().isoformat(),
             })
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected")
+        manager.disconnect_live(websocket)
+        logger.info("Live WebSocket disconnected")
 
 
 @app.websocket("/ws/job/{job_id}")
 async def websocket_job(websocket: WebSocket, job_id: str):
     """Per-job WebSocket for streaming pipeline progress."""
-    await manager.connect(websocket, job_id)
+    await manager.connect_job(websocket, job_id)
     try:
         while True:
             data = await websocket.receive_text()
-            # Echo heartbeat
             await websocket.send_json({"type": "pong", "job_id": job_id})
     except WebSocketDisconnect:
-        manager.disconnect(websocket, job_id)
+        manager.disconnect_job(websocket, job_id)
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "1.0.0", "timestamp": datetime.utcnow().isoformat()}
+    return {
+        "status": "ok",
+        "version": "2.0.0",
+        "models": ["hmm_regime", "kan_alpha", "lgbm_alpha", "patchtst", "il"],
+        "timestamp": datetime.utcnow().isoformat(),
+    }
