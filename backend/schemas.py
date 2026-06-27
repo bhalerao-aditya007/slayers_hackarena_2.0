@@ -1,15 +1,10 @@
-"""Pydantic schemas for all API contracts — Extended for full portfolio input."""
+"""Pydantic schemas for all API contracts."""
 from __future__ import annotations
-
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from uuid import UUID
-
 from pydantic import BaseModel, Field, field_validator
 
-
-# ── Enums ──────────────────────────────────────────────────────────────────────
 
 class RiskTolerance(str, Enum):
     conservative = "conservative"
@@ -43,83 +38,34 @@ class JobStatus(str, Enum):
     error = "error"
 
 
-# ── Portfolio Input (from user) ────────────────────────────────────────────────
-
 class HoldingInput(BaseModel):
-    """A single stock holding in the user's existing portfolio."""
     ticker: str = Field(..., description="NSE ticker e.g. RELIANCE.NS")
-    shares: float = Field(..., gt=0, description="Number of shares held")
-    avg_buy_price: float = Field(..., gt=0, description="Average purchase price in INR")
-    current_price: float | None = Field(None, description="Current market price (fetched if not provided)")
-    sector: str | None = Field(None, description="Sector override (auto-detected from SECTOR_MAP if blank)")
-
-    @property
-    def current_value_inr(self) -> float:
-        price = self.current_price or self.avg_buy_price
-        return self.shares * price
-
-    @property
-    def cost_basis_inr(self) -> float:
-        return self.shares * self.avg_buy_price
-
-    @property
-    def unrealised_pnl_inr(self) -> float:
-        return self.current_value_inr - self.cost_basis_inr
-
-    @property
-    def unrealised_pnl_pct(self) -> float:
-        if self.cost_basis_inr == 0:
-            return 0.0
-        return self.unrealised_pnl_inr / self.cost_basis_inr
+    shares: float = Field(..., gt=0)
+    avg_buy_price: float = Field(..., gt=0)
+    current_price: float | None = None
+    sector: str | None = None
 
 
 class PortfolioInput(BaseModel):
-    """Full portfolio submitted by the user."""
     holdings: list[HoldingInput] = Field(default_factory=list)
-    total_invested_inr: float = Field(..., gt=0, description="Total capital deployed (INR)")
-    cash_inr: float = Field(default=0.0, ge=0, description="Uninvested cash (INR)")
-    demat_id: str | None = Field(None, description="Optional broker/demat identifier")
+    total_invested_inr: float = Field(..., gt=0)
+    cash_inr: float = Field(default=0.0, ge=0)
+    demat_id: str | None = None
 
-    @property
-    def total_current_value(self) -> float:
-        return sum(h.current_value_inr for h in self.holdings) + self.cash_inr
-
-    @property
-    def weight_map(self) -> dict[str, float]:
-        total = self.total_current_value or 1.0
-        return {h.ticker: h.current_value_inr / total for h in self.holdings}
-
-
-# ── Core Domain Objects ────────────────────────────────────────────────────────
 
 class InvestmentGoal(BaseModel):
-    return_target: float = Field(..., ge=0.0, le=5.0)
-    max_drawdown: float = Field(..., ge=0.0, le=1.0)
+    return_target: float = Field(default=0.15, ge=0.0, le=5.0)
+    max_drawdown: float = Field(default=0.10, ge=0.0, le=1.0)
     sectors_excluded: list[str] = Field(default_factory=list)
-    capital_inr: float = Field(..., gt=0)
-    horizon_days: int = Field(..., gt=0, le=3650)
+    capital_inr: float = Field(default=500000.0, gt=0)
+    horizon_days: int = Field(default=252, gt=0, le=3650)
     risk_tolerance: RiskTolerance = RiskTolerance.moderate
-
-    @field_validator("return_target")
-    @classmethod
-    def clamp_return_target(cls, v: float) -> float:
-        return min(v, 2.0)
-
-    @field_validator("max_drawdown")
-    @classmethod
-    def clamp_drawdown(cls, v: float) -> float:
-        return min(v, 0.99)
-
-
-class TickerWeight(BaseModel):
-    ticker: str
-    weight: float = Field(..., ge=0.0, le=1.0)
 
 
 class AnalyzeRequest(BaseModel):
-    nl_goal: str = Field(..., min_length=10, max_length=2000, description="Natural language investment goal")
+    nl_goal: str = Field(..., min_length=5, max_length=2000)
     portfolio: list[PortfolioInput] = Field(default_factory=list)
-    parsed_goal: InvestmentGoal | None = Field(None, description="Optional pre-parsed goal override")
+    parsed_goal: InvestmentGoal | None = None
 
 
 class AlphaSignal(BaseModel):
@@ -203,8 +149,6 @@ class PortfolioResult(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-# ── API Response Wrappers ──────────────────────────────────────────────────────
-
 class AnalyzeResponse(BaseModel):
     job_id: str
     status: JobStatus = JobStatus.queued
@@ -218,50 +162,7 @@ class StatusResponse(BaseModel):
     error: str | None = None
 
 
-class StockInfo(BaseModel):
-    ticker: str
-    name: str
-    sector: str
-    price: float
-    return_1d: float
-    return_5d: float
-    return_20d: float
-    volume: int
-
-
-class StocksResponse(BaseModel):
-    stocks: list[StockInfo]
-    nifty_50_level: float
-    india_vix: float
-    timestamp: datetime
-
-
 class ScenarioRequest(BaseModel):
     job_id: str
     scenario_type: str = Field(..., pattern="^(2008|covid|rate_hike_2022|custom)$")
     custom_shock: dict[str, float] | None = None
-
-
-class ScenarioResult(BaseModel):
-    scenario_type: str
-    baseline_cvar: float
-    shocked_cvar: float
-    baseline_max_dd: float
-    shocked_max_dd: float
-    contagion_path: dict[str, float]
-
-
-# ── WebSocket Message Types ────────────────────────────────────────────────────
-
-class WsMessageType(str, Enum):
-    regime_update = "regime_update"
-    price_tick = "price_tick"
-    agent_message = "agent_message"
-    ic_update = "ic_update"
-    gate_alert = "gate_alert"
-
-
-class WsMessage(BaseModel):
-    type: WsMessageType
-    data: dict[str, Any]
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
